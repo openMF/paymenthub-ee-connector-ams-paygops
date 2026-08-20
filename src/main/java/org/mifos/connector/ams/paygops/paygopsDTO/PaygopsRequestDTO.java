@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 /**
  {
  "transaction_id": "A1234B5678",
@@ -30,7 +32,7 @@ public class PaygopsRequestDTO {
     private String transactionId;
 
     @JsonProperty("amount")
-    private Long amount;
+    private BigDecimal amount;
 
     @JsonProperty("wallet_name")
     private String walletName;

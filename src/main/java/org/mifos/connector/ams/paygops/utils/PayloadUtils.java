@@ -4,6 +4,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.mifos.connector.ams.paygops.paygopsDTO.PaygopsRequestDTO;
 
+import java.math.BigDecimal;
+
 public class PayloadUtils {
 
     public static PaygopsRequestDTO convertPaybillPayloadToAmsPaygopsPayload(JSONObject payload) {
@@ -14,7 +16,7 @@ public class PayloadUtils {
         String wallet_name = convertCustomData(payload.getJSONArray("customData"), "wallet_name");
         String wallet_msisdn=payload.getJSONObject("secondaryIdentifier").getString("value");
         String amount=convertCustomData(payload.getJSONArray("customData"),"amount").trim();
-        Long amountLong = Double.valueOf(amount).longValue();
+        BigDecimal amountValue = new BigDecimal(amount);
 
         PaygopsRequestDTO validationRequestDTO = new PaygopsRequestDTO();
         validationRequestDTO.setPhoneNumber(wallet_msisdn);
@@ -22,7 +24,7 @@ public class PayloadUtils {
         validationRequestDTO.setCurrency(currency);
         validationRequestDTO.setMemo(memo);
         validationRequestDTO.setWalletName(wallet_name);
-        validationRequestDTO.setAmount(amountLong);
+        validationRequestDTO.setAmount(amountValue);
         return validationRequestDTO;
     }
     public static String convertCustomData(JSONArray customData, String key)

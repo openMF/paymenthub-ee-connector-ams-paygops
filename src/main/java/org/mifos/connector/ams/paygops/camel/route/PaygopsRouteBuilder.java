@@ -13,8 +13,12 @@ import org.mifos.connector.ams.paygops.utils.ErrorCodeEnum;
 import org.mifos.connector.ams.paygops.utils.PayloadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.mifos.connector.ams.paygops.camel.config.CamelProperties.*;
 import static org.mifos.connector.ams.paygops.camel.config.CamelProperties.AMS_REQUEST;
@@ -24,6 +28,11 @@ import static org.mifos.connector.ams.paygops.zeebe.ZeebeVariables.*;
 public class PaygopsRouteBuilder extends RouteBuilder {
 
     Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    // The application configures its own ObjectMapper (NON_NULL, JavaTimeModule,
+    // FAIL_ON_UNKNOWN_PROPERTIES off). Use that one instead of a fresh default.
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Value("${paygops.base-url}")
     private String paygopsBaseUrl;
@@ -57,19 +66,16 @@ public class PaygopsRouteBuilder extends RouteBuilder {
         from("rest:POST:/api/v1/payments/validate")
                 .process(exchange -> {
                     JSONObject channelRequest = new JSONObject(exchange.getIn().getBody(String.class));
-                    String transactionId = "123";
-                    log.info(channelRequest.toString());
                     exchange.setProperty(CHANNEL_REQUEST, channelRequest);
-                    exchange.setProperty(TRANSACTION_ID, transactionId);
+                    exchange.setProperty(TRANSACTION_ID, transactionIdFrom(channelRequest));
                 })
                 .to("direct:transfer-validation-base");
 
         from("rest:POST:/api/paymentHub/Confirmation")
                 .process(exchange -> {
                     JSONObject channelRequest = new JSONObject(exchange.getIn().getBody(String.class));
-                    String transactionId = "123";
                     exchange.setProperty(CHANNEL_REQUEST, channelRequest);
-                    exchange.setProperty(TRANSACTION_ID, transactionId);
+                    exchange.setProperty(TRANSACTION_ID, transactionIdFrom(channelRequest));
                 })
                 .to("direct:transfer-settlement-base");
 
@@ -115,14 +121,13 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                 .otherwise()
                 .log(LoggingLevel.ERROR, "Paygops Validation unsuccessful")
                 .process(exchange -> {
-                    // processing unsuccessful case
-                    String body = exchange.getIn().getBody(String.class);
-                    JSONObject jsonObject = new JSONObject(body);
-                    Integer errorCode = jsonObject.getInt("error");
-                    String errorDescription   = jsonObject.getString("error_message");
-                    String errorInfo = jsonObject.toString(1);
-                    setErrorCamelInfo(exchange,errorDescription,errorCode,errorInfo);
+                    // Set the outcome first, then try to describe it. The body is not
+                    // guaranteed to be the PaygOps error shape: a gateway can answer with
+                    // HTML and a 401 comes back with different JSON. If parsing threw here
+                    // the flag stayed unset, and the Zeebe worker then unboxed a null
+                    // property and the job was never completed.
                     exchange.setProperty(PARTY_LOOKUP_FAILED, true);
+                    describeErrorFromBody(exchange);
                 });
 
         from("direct:transfer-validation")
@@ -140,7 +145,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                         String transactionId = exchange.getProperty(TRANSACTION_ID, String.class);
                         PaygopsRequestDTO verificationRequestDTO = getPaygopsDtoFromChannelRequest(channelRequest,
                                 transactionId);
-                        logger.info("Validation request DTO: \n\n\n" + verificationRequestDTO);
+                        logger.debug("Validation request DTO: \n\n\n" + verificationRequestDTO);
                         return verificationRequestDTO;
                     }
                     else {
@@ -169,8 +174,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                     // processing success case
                     try {
                         String body = exchange.getIn().getBody(String.class);
-                        ObjectMapper mapper = new ObjectMapper();
-                        PaygopsResponseDto result = mapper.readValue(body, PaygopsResponseDto.class);
+                        PaygopsResponseDto result = objectMapper.readValue(body, PaygopsResponseDto.class);
                         if (result.getReception_datetime()!=null) {
                             logger.info("Paygops Settlement Successful");
                             exchange.setProperty(TRANSFER_SETTLEMENT_FAILED, false);
@@ -194,14 +198,9 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                 .otherwise()
                 .log(LoggingLevel.ERROR, "Settlement unsuccessful")
                 .process(exchange -> {
-                    // processing unsuccessful case
-                    String body = exchange.getIn().getBody(String.class);
-                    JSONObject jsonObject = new JSONObject(body);
-                    Integer errorCode = jsonObject.getInt("error");
-                    String errorDescription = jsonObject.getString("error_message");
-                    String errorInfo = jsonObject.toString(1);
-                    setErrorCamelInfo(exchange,errorDescription,errorCode,errorInfo);
+                    // Same as the validation branch: outcome first, description after.
                     exchange.setProperty(TRANSFER_SETTLEMENT_FAILED, true);
+                    describeErrorFromBody(exchange);
                 });
 
         from("rest:POST:/api/v1/paybill/validate/paygops")
@@ -276,7 +275,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
         String operatorName = "MPESA";
 
 
-        Long amount = amountJson.getLong("amount");
+        BigDecimal amount = amountJson.getBigDecimal("amount");
         String currency = amountJson.getString("currency");
         String country = "KE";
 
@@ -292,8 +291,30 @@ public class PaygopsRouteBuilder extends RouteBuilder {
         return verificationRequestDTO;
     }
 
+    // The channel request does not always carry a transaction id. This used to be
+    // the literal "123", so every payment reached PaygOps under the same id.
+    private static String transactionIdFrom(JSONObject channelRequest) {
+        String transactionId = channelRequest.optString(TRANSACTION_ID, "");
+        return transactionId.isEmpty() ? UUID.randomUUID().toString() : transactionId;
+    }
+
+    // Reads the PaygOps error shape when the body has it, and still records
+    // something useful when it does not.
+    private void describeErrorFromBody(Exchange exchange) {
+        String body = exchange.getIn().getBody(String.class);
+        try {
+            JSONObject jsonObject = new JSONObject(body);
+            setErrorCamelInfo(exchange, jsonObject.getString("error_message"),
+                    jsonObject.getInt("error"), jsonObject.toString(1));
+        } catch (Exception e) {
+            logger.error("Paygops error response could not be parsed due to : {} ", String.valueOf(e));
+            setErrorCamelInfo(exchange, "Paygops call failed and the error body could not be parsed",
+                    ErrorCodeEnum.DEFAULT.getCode(), body == null ? "" : body);
+        }
+    }
+
     private void setErrorCamelInfo(Exchange exchange, String errorDesc, Integer errorCode, String errorInfo) {
-        logger.info(errorInfo);
+        logger.debug(errorInfo);
         exchange.setProperty(ERROR_CODE, errorCode);
         exchange.setProperty(ERROR_INFORMATION, errorInfo);
         exchange.setProperty(ERROR_DESCRIPTION, errorDesc);

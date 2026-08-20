@@ -61,7 +61,6 @@ public class ZeebeWorkers {
 
                         JSONObject channelRequest = new JSONObject((String) variables.get("channelRequest"));
                         String transactionId = (String) variables.get(TRANSACTION_ID);
-                        logger.info("Channel Request :" + ex.getProperty(CHANNEL_REQUEST));
                         ex.setProperty(CHANNEL_REQUEST, channelRequest);
                         ex.setProperty(TRANSACTION_ID, transactionId);
 
@@ -102,7 +101,6 @@ public class ZeebeWorkers {
                         String transactionId = (String) variables.get(TRANSACTION_ID);
                         ex.setProperty(TRANSACTION_ID, variables.getOrDefault(EXTERNAL_ID, transactionId));
                         ex.setProperty(CHANNEL_REQUEST, channelRequest);
-                        logger.info("Channel Request :" + ex.getProperty(CHANNEL_REQUEST));
                         producerTemplate.send("direct:transfer-settlement-base", ex);
                         boolean isSettlementFailed = ex.getProperty(TRANSFER_SETTLEMENT_FAILED, boolean.class);
                         if (isSettlementFailed) {
@@ -119,9 +117,13 @@ public class ZeebeWorkers {
                         variables.put(TRANSFER_SETTLEMENT_FAILED, false);
                     }
 
+                    // join() like the validation worker: without it a failed completion
+                    // is swallowed, Zeebe re-runs the job and PaygOps is told to confirm
+                    // the same collection twice.
                     zeebeClient.newCompleteCommand(job.getKey())
                             .variables(variables)
-                            .send();
+                            .send()
+                            .join();
                 })
                 .name("transfer-settlement-paygops")
                 .maxJobsActive(workerMaxJobs)

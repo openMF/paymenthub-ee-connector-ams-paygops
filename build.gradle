@@ -14,10 +14,10 @@ repositories {
     maven {
         url = uri('https://repo.maven.apache.org/maven2')
     }
-    // paymenthub-ee-bom 2.0.0-SNAPSHOT lives on the official Mifos JFrog. The old
-    // fyn-libs-snapshot repo is gone, and the local JFrog sandbox this used to point
-    // at (localhost:8081, with credentials from the environment) meant the build did
-    // not resolve at all outside one machine.
+    // paymenthub-ee-bom 2.0.0-SNAPSHOT lives on the official Mifos JFrog. The two
+    // repositories this used to point at are both gone: one has been retired, the
+    // other was a JFrog sandbox on localhost:8081 with credentials from the
+    // environment, so the build did not resolve outside one machine.
     maven {
         url = uri('https://mifos.jfrog.io/artifactory/phee-gradle-local')
     }
