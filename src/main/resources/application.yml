@@ -1,0 +1,43 @@
+camel:
+  server-port: 5000
+  springboot:
+    main-run-controller: true
+  dataformat:
+    # Camel 4 renamed this data format from `json-jackson` to `jackson`. With the
+    # old key the routes marshalled with a default ObjectMapper instead of ours.
+    jackson:
+      auto-discover-object-mapper: true
+
+zeebe:
+  client:
+    max-execution-threads: 100
+    number-of-workers: 5
+    evenly-allocated-max-jobs: "#{${zeebe.client.max-execution-threads} / ${zeebe.client.number-of-workers}}"
+  broker:
+    contactpoint: "localhost:26500"
+
+ams:
+  local:
+    enabled: true
+  timeout: 60000
+
+paygops:
+  base-url: ${PAYGOPS_BASE_URL:https://feature-test1.paygops.com/}
+  endpoint:
+    verification: api/v1/payments/validate
+    confirmation: api/v1/payments
+  # No default on purpose: with an empty one the connector starts up healthy and
+  # sends "Bearer " on every call, and the 401 that comes back is only visible
+  # deep in the error branch. Without a default the context refuses to start and
+  # names the missing property.
+  authheader: ${PAYGOPS_AUTHHEADER}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      liveness:
+        enabled: true
+      readiness:
+        enabled: true
