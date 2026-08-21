@@ -1,0 +1,20 @@
+# Normalize line endings so the Gradle wrapper works on every platform,
+# whatever each contributor has in core.autocrlf. eol=lf keeps the working
+# tree LF everywhere, which is what .editorconfig and the spotless check on
+# build.gradle expect.
+* text=auto eol=lf
+
+# cmd.exe expects CRLF in batch files; this is how Gradle ships gradlew.bat.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# The shell wrapper must stay LF, or /bin/sh fails with "bad interpreter"
+# on Linux, macOS, WSL and inside containers.
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Never touch binaries.
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary

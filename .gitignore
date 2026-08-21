@@ -60,3 +60,19 @@ bin/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Spring Boot
+HELP.md
+
+# Eclipse / STS
+.apt_generated
+.factorypath
+.springBeans
+.sts4-cache
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
