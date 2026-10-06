@@ -6,6 +6,8 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.json.JSONObject;
+import org.mifos.connector.ams.paygops.config.AmsProperties;
+import org.mifos.connector.ams.paygops.config.PaygopsProperties;
 import org.mifos.connector.ams.paygops.paygopsDTO.PaygopsRequestDTO;
 import org.mifos.connector.ams.paygops.paygopsDTO.PaygopsResponseDto;
 import org.mifos.connector.ams.paygops.utils.ConnectionUtils;
@@ -34,20 +36,16 @@ public class PaygopsRouteBuilder extends RouteBuilder {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${paygops.base-url}")
-    private String paygopsBaseUrl;
+    private final String paygopsBaseUrl;
 
-    @Value("${paygops.endpoint.verification}")
-    private String verificationEndpoint;
+    private final String verificationEndpoint;
 
-    @Value("${paygops.endpoint.confirmation}")
-    private String confirmationEndpoint;
+    private final String confirmationEndpoint;
 
     @Value("${paygops.auth-header}")
     private String accessToken;
 
-    @Value("${ams.timeout}")
-    private Integer amsTimeout;
+    private final Integer amsTimeout;
 
     enum accountStatus{
         ACTIVE,
@@ -55,8 +53,11 @@ public class PaygopsRouteBuilder extends RouteBuilder {
     }
 
 
-    public PaygopsRouteBuilder() {
-
+    public PaygopsRouteBuilder(PaygopsProperties paygopsProperties, AmsProperties amsProperties) {
+        this.paygopsBaseUrl = paygopsProperties.baseUrl();
+        this.verificationEndpoint = paygopsProperties.endpoint().verification();
+        this.confirmationEndpoint = paygopsProperties.endpoint().confirmation();
+        this.amsTimeout = amsProperties.timeout();
     }
 
 
