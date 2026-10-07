@@ -1,18 +1,21 @@
 package org.mifos.connector.ams.paygops.zeebe;
 
 import io.camunda.zeebe.client.ZeebeClient;
-import org.springframework.beans.factory.annotation.Value;
+import org.mifos.connector.ams.paygops.config.ZeebeProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ZeebeClientConfiguration {
 
-    @Value("${zeebe.broker.contactpoint}")
-    private String zeebeBrokerContactpoint;
+    private final String zeebeBrokerContactpoint;
 
-    @Value("${zeebe.client.max-execution-threads}")
-    private int zeebeClientMaxThreads;
+    private final int zeebeClientMaxThreads;
+
+    public ZeebeClientConfiguration(ZeebeProperties zeebeProperties) {
+        this.zeebeBrokerContactpoint = zeebeProperties.broker().contactpoint();
+        this.zeebeClientMaxThreads = zeebeProperties.client().maxExecutionThreads();
+    }
 
     @Bean
     public ZeebeClient setup() {
